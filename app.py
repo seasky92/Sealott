@@ -45,64 +45,20 @@ if 'info_msg' in st.session_state:
     st.info(st.session_state.info_msg)
     del st.session_state.info_msg
 
-# ==========================================
-# 1. 인기 패턴 기반 랜덤 추천기
-# ==========================================
-st.subheader("🎲 인기 패턴 기반 번호 추천")
-st.write("DB에 등록된 가장 최근 4회차 데이터를 기준으로 번호를 추출합니다.")
-
 current_data = st.session_state.lotto_data
-if len(current_data) >= 4:
-    latest_4 = current_data[-4:]
-    recent_appeared = []
-    for d in latest_4:
-        recent_appeared.extend(d[1:8])
-        
-    current_freq = {n: 0 for n in range(1, 46)}
-    for n in recent_appeared:
-        current_freq[n] += 1
-        
-    pool_0 = [n for n, c in current_freq.items() if c == 0]
-    pool_1 = [n for n, c in current_freq.items() if c == 1]
-    pool_2plus = [n for n, c in current_freq.items() if c >= 2]
-
-    st.caption(f"📊 현재 번호 풀 (미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
-
-    col1, col2 = st.columns([2, 1])
-    with col1:
-        target_pattern = st.selectbox(
-            "원하시는 패턴을 선택하세요 (0회 : 1회 : 2회이상)",
-            ["4:2:0 패턴 (가장 자주 등장)", "3:2:1 패턴", "3:3:0 패턴", "5:1:0 패턴", "4:1:1 패턴", "2:4:0 패턴"]
-        )
-    with col2:
-        st.write("") 
-        st.write("")
-        gen_btn = st.button("행운 번호 뽑기! 🍀", use_container_width=True)
-
-    if gen_btn:
-        p_str = target_pattern.split(" ")[0] 
-        p0, p1, p2 = map(int, p_str.split(":"))
-        
-        if len(pool_0) >= p0 and len(pool_1) >= p1 and len(pool_2plus) >= p2:
-            rec_nums = random.sample(pool_0, p0) + random.sample(pool_1, p1) + random.sample(pool_2plus, p2)
-            rec_nums.sort()
-            st.success(f"🎉 **추천 번호:** {', '.join(map(str, rec_nums))}")
-        else:
-            st.error("현재 누적된 번호 풀의 숫자가 부족하여 해당 패턴을 생성할 수 없습니다.")
-
-st.divider()
 
 # ==========================================
-# 2. 최근 20회차 패턴 통계
+# 공통: 최근 20회차 패턴 통계 사전 계산
 # ==========================================
-st.subheader("📈 최근 20회차 패턴 출현 통계")
+analyze_count = 0
+df_patterns = pd.DataFrame()
+pattern_counts = Counter()
 
 if len(current_data) >= 5: 
     analyze_count = min(20, len(current_data) - 4)
     recent_analysis_data = current_data[-(analyze_count + 4):]
     
     pattern_list = []
-    
     for i in range(4, len(recent_analysis_data)):
         curr_draw = recent_analysis_data[i]
         prev_4_draws = recent_analysis_data[i-4:i]
@@ -127,7 +83,73 @@ if len(current_data) >= 5:
     pattern_counts = Counter(pattern_list)
     df_patterns = pd.DataFrame(pattern_counts.items(), columns=["패턴", "출현 횟수"])
     df_patterns = df_patterns.sort_values(by="출현 횟수", ascending=False).reset_index(drop=True)
-    
+
+# ==========================================
+# 1. 인기 패턴 기반 랜덤 추천기
+# ==========================================
+st.subheader("🎲 인기 패턴 기반 번호 추천")
+st.write("DB에 등록된 가장 최근 4회차 데이터를 기준으로 번호를 추출합니다.")
+
+if len(current_data) >= 4:
+    latest_4 = current_data[-4:]
+    recent_appeared = []
+    for d in latest_4:
+        recent_appeared.extend(d[1:8])
+        
+    current_freq = {n: 0 for n in range(1, 46)}
+    for n in recent_appeared:
+        current_freq[n] += 1
+        
+    pool_0 = [n for n, c in current_freq.items() if c == 0]
+    pool_1 = [n for n, c in current_freq.items() if c == 1]
+    pool_2plus = [n for n, c in current_freq.items() if c >= 2]
+
+    st.caption(f"📊 현재 번호 풀 (미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
+
+    # 선택 박스 동적 생성 (실제 1위 패턴을 맨 위로)
+    base_patterns = ["2:4:0", "4:2:0", "4:1:1", "3:2:1", "3:3:0", "5:1:0"]
+    sorted_patterns = [p for p, c in pattern_counts.most_common()]
+    for bp in base_patterns:
+        if bp not in sorted_patterns:
+            sorted_patterns.append(bp)
+            
+    selectbox_options = []
+    for i, p in enumerate(sorted_patterns[:8]): 
+        if i == 0 and len(pattern_counts) > 0:
+            selectbox_options.append(f"{p} 패턴 (⭐최근 1위)")
+        else:
+            selectbox_options.append(f"{p} 패턴")
+
+    col1, col2 = st.columns([2, 1])
+    with col1:
+        target_pattern = st.selectbox(
+            "원하시는 패턴을 선택하세요 (자동 정렬)",
+            selectbox_options
+        )
+    with col2:
+        st.write("") 
+        st.write("")
+        gen_btn = st.button("행운 번호 뽑기! 🍀", use_container_width=True)
+
+    if gen_btn:
+        p_str = target_pattern.split(" ")[0] 
+        p0, p1, p2 = map(int, p_str.split(":"))
+        
+        if len(pool_0) >= p0 and len(pool_1) >= p1 and len(pool_2plus) >= p2:
+            rec_nums = random.sample(pool_0, p0) + random.sample(pool_1, p1) + random.sample(pool_2plus, p2)
+            rec_nums.sort()
+            st.success(f"🎉 **추천 번호:** {', '.join(map(str, rec_nums))}")
+        else:
+            st.error("현재 누적된 번호 풀의 숫자가 부족하여 해당 패턴을 생성할 수 없습니다.")
+
+st.divider()
+
+# ==========================================
+# 2. 최근 20회차 패턴 통계
+# ==========================================
+st.subheader("📈 최근 20회차 패턴 출현 통계")
+
+if not df_patterns.empty: 
     col_chart1, col_chart2 = st.columns([1, 2])
     with col_chart1:
         st.write(f"**최근 {analyze_count}회 동안의 패턴 순위**")
@@ -193,7 +215,7 @@ if submitted:
 st.divider()
 
 # ==========================================
-# 4. 누적 데이터베이스 (패턴 열 추가 반영)
+# 4. 누적 데이터베이스
 # ==========================================
 st.subheader("📊 누적 당첨번호 데이터베이스")
 
