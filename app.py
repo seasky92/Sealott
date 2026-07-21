@@ -93,11 +93,9 @@ if len(data) >= 5:
     recent_analysis_data = data[-(analyze_count + 4):]
     
     pattern_list = []
-    recent_patterns_details = [] # 상세 패턴 저장을 위한 리스트 추가
     
     for i in range(4, len(recent_analysis_data)):
         curr_draw = recent_analysis_data[i]
-        curr_draw_no = curr_draw[0] # 현재 분석 중인 회차 번호
         prev_4_draws = recent_analysis_data[i-4:i]
         
         appeared = []
@@ -115,13 +113,8 @@ if len(data) >= 5:
             elif freq[w] == 1: c1 += 1
             else: c2 += 1
             
-        pattern_str = f"{c0}:{c1}:{c2}"
-        pattern_list.append(pattern_str)
+        pattern_list.append(f"{c0}:{c1}:{c2}")
         
-        # 회차와 패턴 정보를 딕셔너리로 저장
-        recent_patterns_details.append({"회차": f"{curr_draw_no}회", "패턴": pattern_str})
-        
-    # 기존 통계 표 및 차트 출력 부분
     pattern_counts = Counter(pattern_list)
     df_patterns = pd.DataFrame(pattern_counts.items(), columns=["패턴", "출현 횟수"])
     df_patterns = df_patterns.sort_values(by="출현 횟수", ascending=False).reset_index(drop=True)
@@ -132,21 +125,6 @@ if len(data) >= 5:
         st.dataframe(df_patterns, use_container_width=True)
     with col_chart2:
         st.bar_chart(df_patterns.set_index("패턴"))
-
-    # 💡 신규 추가: 최근 10회차 상세 패턴 보기
-    st.write("---")
-    st.write("📝 **최근 10회차 상세 당첨 패턴**")
-    
-    # 가장 최근 데이터가 위로 오도록 역순 정렬 후 최대 10개 추출
-    recent_10 = recent_patterns_details[-10:][::-1]
-    
-    # 5칸짜리 컬럼을 만들어 모바일과 PC에서 보기 좋게 카드 형태로 배치
-    cols = st.columns(5)
-    for idx, item in enumerate(recent_10):
-        col_idx = idx % 5
-        with cols[col_idx]:
-            st.info(f"**{item['회차']}**\n\n🎯 {item['패턴']}")
-
 else:
     st.info("패턴 통계를 보려면 최소 5개 회차 이상의 데이터가 필요합니다.")
 
@@ -198,7 +176,38 @@ if len(current_data) >= 4:
 
 st.divider()
 
-# --- 4. 누적 데이터베이스 ---
+# --- 4. 누적 데이터베이스 (패턴 열 추가 반영) ---
 st.subheader("📊 누적 당첨번호 데이터베이스")
-df = pd.DataFrame(st.session_state.lotto_data, columns=['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스'])
+
+data = st.session_state.lotto_data
+display_data = []
+
+# 각 회차별로 패턴을 계산하여 리스트에 추가
+for i in range(len(data)):
+    row = data[i]
+    if i >= 4:
+        prev_4 = data[i-4:i]
+        appeared_nums = []
+        for d in prev_4:
+            appeared_nums.extend(d[1:8])
+            
+        freq = {n: 0 for n in range(1, 46)}
+        for n in appeared_nums:
+            freq[n] += 1
+            
+        wns = row[1:7]
+        c0, c1, c2 = 0, 0, 0
+        for w in wns:
+            if freq[w] == 0: c0 += 1
+            elif freq[w] == 1: c1 += 1
+            else: c2 += 1
+        pattern_str = f"{c0}:{c1}:{c2}"
+    else:
+        # 데이터가 부족한 최초 4회차는 계산 불가 표시
+        pattern_str = "-" 
+        
+    display_data.append(row + [pattern_str])
+
+# 데이터프레임 생성 및 출력
+df = pd.DataFrame(display_data, columns=['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스', '출현패턴'])
 st.dataframe(df.sort_values(by='회차', ascending=False), use_container_width=True)
