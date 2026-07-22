@@ -2,49 +2,30 @@ import streamlit as st
 import pandas as pd
 import random
 from collections import Counter
-import gspread
-from google.oauth2.service_account import Credentials
+import os
 
-# ---------------------------------------------
-# 1. 페이지 설정 및 구글 시트 연동 세팅
-# ---------------------------------------------
+# 페이지 설정
 st.set_page_config(page_title="로또 패턴 분석기", page_icon="🎯", layout="wide")
 
-# 구글 API 인증 설정
-scopes = [
-    "https://www.googleapis.com/auth/spreadsheets",
-    "https://www.googleapis.com/auth/drive"
-]
-creds = Credentials.from_service_account_info(
-    st.secrets["gcp_service_account"],
-    scopes=scopes
-)
-client = gspread.authorize(creds)
-
-# 구글 시트 데이터 불러오기 함수 (캐싱 적용하여 속도 향상)
-@st.cache_data(ttl=5) # 5초마다 데이터 갱신 허용
-def load_data_from_sheet():
-    sheet = client.open("로또DB").sheet1
-    data = sheet.get_all_values()
-    
-    # 헤더 제외하고 정수형으로 변환
-    parsed_data = []
-    if len(data) > 1:
-        for row in data[1:]:
-            parsed_data.append([int(x) for x in row])
-    return parsed_data
-
-# 세션에 데이터 로드
-try:
-    current_data = load_data_from_sheet()
-except Exception as e:
-    st.error("구글 시트 연동에 실패했습니다. Secrets 설정 및 시트 이름을 확인해주세요.")
-    current_data = []
-
 st.title("🎯 로또 직전 4회차 패턴 자동 분석기")
-st.markdown("새로운 당첨번호를 입력하면 구글 시트(DB)에 자동 저장되며 패턴을 분석합니다.")
+st.markdown("새로운 당첨번호를 입력하여 패턴을 분석하고, 인기 패턴 기반으로 번호를 추천받아 보세요!")
 
-# 새로고침 메시지 처리
+# ==========================================
+# 🚀 엑셀 데이터 불러오기 (최초 1회 실행)
+# ==========================================
+if 'lotto_data' not in st.session_state:
+    try:
+        # 같은 폴더에 있는 로또DB.xlsx 파일을 읽어옵니다.
+        df = pd.read_excel("로또DB.xlsx")
+        # 계산 로직을 위해 과거 회차가 위로 오도록 오름차순 정렬합니다.
+        sorted_df = df.sort_values(by='회차', ascending=True)
+        # 리스트 형태로 변환하여 세션 상태에 저장합니다.
+        st.session_state.lotto_data = sorted_df.values.tolist()
+    except Exception as e:
+        st.error(f"데이터베이스 파일을 불러오는 중 오류가 발생했습니다: {e}")
+        st.session_state.lotto_data = []
+
+# 데이터 입력 후 새로고침 시 메시지를 띄워주기 위한 로직
 if 'success_msg' in st.session_state:
     st.success(st.session_state.success_msg)
     del st.session_state.success_msg
@@ -52,7 +33,11 @@ if 'info_msg' in st.session_state:
     st.info(st.session_state.info_msg)
     del st.session_state.info_msg
 
+current_data = st.session_state.lotto_data
+
+# ==========================================
 # 공통: 최근 20회차 패턴 통계 사전 계산
+# ==========================================
 analyze_count = 0
 df_patterns = pd.DataFrame()
 pattern_counts = Counter()
@@ -87,9 +72,9 @@ if len(current_data) >= 5:
     df_patterns = pd.DataFrame(pattern_counts.items(), columns=["패턴", "출현 횟수"])
     df_patterns = df_patterns.sort_values(by="출현 횟수", ascending=False).reset_index(drop=True)
 
-# ---------------------------------------------
-# 2. 인기 패턴 기반 랜덤 추천기
-# ---------------------------------------------
+# ==========================================
+# 1. 인기 패턴 기반 랜덤 추천기
+# ==========================================
 st.subheader("🎲 인기 패턴 기반 번호 추천")
 st.write("DB에 등록된 가장 최근 4회차 데이터를 기준으로 번호를 추출합니다.")
 
@@ -109,6 +94,7 @@ if len(current_data) >= 4:
 
     st.caption(f"📊 현재 번호 풀 (미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
 
+    # 선택 박스 동적 생성 (실제 1위 패턴을 맨 위로)
     base_patterns = ["2:4:0", "4:2:0", "4:1:1", "3:2:1", "3:3:0", "5:1:0"]
     sorted_patterns = [p for p, c in pattern_counts.most_common()]
     for bp in base_patterns:
@@ -124,7 +110,10 @@ if len(current_data) >= 4:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        target_pattern = st.selectbox("원하시는 패턴을 선택하세요", selectbox_options)
+        target_pattern = st.selectbox(
+            "원하시는 패턴을 선택하세요 (자동 정렬)",
+            selectbox_options
+        )
     with col2:
         st.write("") 
         st.write("")
@@ -143,9 +132,9 @@ if len(current_data) >= 4:
 
 st.divider()
 
-# ---------------------------------------------
-# 3. 최근 20회차 패턴 통계
-# ---------------------------------------------
+# ==========================================
+# 2. 최근 20회차 패턴 통계
+# ==========================================
 st.subheader("📈 최근 20회차 패턴 출현 통계")
 
 if not df_patterns.empty: 
@@ -160,13 +149,16 @@ else:
 
 st.divider()
 
-# ---------------------------------------------
-# 4. 신규 당첨번호 입력 (구글 시트 저장)
-# ---------------------------------------------
+# ==========================================
+# 3. 신규 당첨번호 입력
+# ==========================================
 st.subheader("📝 신규 당첨번호 입력")
 with st.form("new_draw_form"):
     cols = st.columns(8)
-    last_draw_no = current_data[-1][0] if current_data else 1230
+    if len(current_data) > 0:
+        last_draw_no = int(current_data[-1][0])
+    else:
+        last_draw_no = 0
     
     draw_no = cols[0].number_input("회차", value=last_draw_no + 1, step=1)
     n1 = cols[1].number_input("번호1", min_value=1, max_value=45, value=1)
@@ -177,7 +169,7 @@ with st.form("new_draw_form"):
     n6 = cols[6].number_input("번호6", min_value=1, max_value=45, value=6)
     bonus = cols[7].number_input("보너스", min_value=1, max_value=45, value=7)
     
-    submitted = st.form_submit_button("DB에 영구 저장 및 분석하기")
+    submitted = st.form_submit_button("패턴 분석 및 DB에 추가하기")
 
 if submitted:
     new_draw = [draw_no, n1, n2, n3, n4, n5, n6, bonus]
@@ -201,26 +193,21 @@ if submitted:
             
         pattern_str = f"{cnt_0}:{cnt_1}:{cnt_2plus}"
         
-        # === 구글 시트에 실제 행(Row) 추가 ===
-        try:
-            sheet = client.open("로또DB").sheet1
-            sheet.append_row(new_draw)
-            load_data_from_sheet.clear() # 캐시 비우기 (새로고침 시 최신화)
-            
-            st.session_state.success_msg = f"✅ **{draw_no}회차 분석 및 구글 시트 저장 완료!**"
-            st.session_state.info_msg = f"**도출된 패턴:** 🎯 {pattern_str} (미출현 {cnt_0}개, 1회출현 {cnt_1}개, 2회이상 {cnt_2plus}개)"
-            st.rerun()
-        except Exception as e:
-            st.error(f"데이터 저장 실패: {e}")
-            
+        # 데이터를 추가하고 새로고침을 위한 메시지 셋팅
+        st.session_state.lotto_data.append(new_draw)
+        st.session_state.success_msg = f"✅ **{draw_no}회차 분석 및 추가 완료!**"
+        st.session_state.info_msg = f"**도출된 패턴:** 🎯 {pattern_str} (미출현 {cnt_0}개, 1회출현 {cnt_1}개, 2회이상 {cnt_2plus}개)"
+        
+        # 상단 차트와 추천기 업데이트를 위해 앱을 즉시 새로고침
+        st.rerun()
     else:
         st.error("직전 4회차 이상의 데이터가 필요합니다.")
 
 st.divider()
 
-# ---------------------------------------------
-# 5. 누적 데이터베이스
-# ---------------------------------------------
+# ==========================================
+# 4. 누적 데이터베이스
+# ==========================================
 st.subheader("📊 누적 당첨번호 데이터베이스")
 
 display_data = []
@@ -249,5 +236,5 @@ for i in range(len(current_data)):
         
     display_data.append(row + [pattern_str])
 
-df = pd.DataFrame(display_data, columns=['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스', '출현패턴'])
-st.dataframe(df.sort_values(by='회차', ascending=False), use_container_width=True)
+df_display = pd.DataFrame(display_data, columns=['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스', '출현패턴'])
+st.dataframe(df_display.sort_values(by='회차', ascending=False), use_container_width=True)
