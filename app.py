@@ -2,38 +2,64 @@ import streamlit as st
 import pandas as pd
 import random
 from collections import Counter
-import os
+import gspread
+from google.oauth2.service_account import Credentials
 
-# 페이지 설정
+# ---------------------------------------------
+# 1. 페이지 설정 및 구글 시트 연동 세팅
+# ---------------------------------------------
 st.set_page_config(page_title="로또 패턴 분석기", page_icon="🎯", layout="wide")
 
-st.title("🎯 로또 직전 4회차 패턴 자동 분석기")
-st.markdown("새로운 당첨번호를 입력하여 패턴을 분석하고, 인기 패턴 기반으로 번호를 추천받아 보세요!")
+# 구글 API 인증 설정 (Streamlit Secrets에서 가져옴)
+scopes = [
+    "https://www.googleapis.com/auth/spreadsheets",
+    "https://www.googleapis.com/auth/drive"
+]
+try:
+    creds = Credentials.from_service_account_info(
+        st.secrets["gcp_service_account"],
+        scopes=scopes
+    )
+    client = gspread.authorize(creds)
+except Exception as e:
+    st.error(f"구글 인증 실패. Secrets 설정을 확인해주세요: {e}")
 
-# ==========================================
-# 🚀 엑셀 데이터 불러오기 (최초 1회 실행)
-# ==========================================
-if 'lotto_data' not in st.session_state:
+# 구글 시트 데이터 불러오기 함수 (캐싱 적용)
+@st.cache_data(ttl=5) # 5초마다 데이터 갱신
+def load_data_from_sheet():
     try:
-        # 같은 폴더에 있는 로또DB.xlsx 파일을 읽어옵니다.
-        df = pd.read_excel("로또DB.xlsx")
-        # 계산 로직을 위해 과거 회차가 위로 오도록 오름차순 정렬합니다.
-        sorted_df = df.sort_values(by='회차', ascending=True)
-        # 리스트 형태로 변환하여 세션 상태에 저장합니다.
-        st.session_state.lotto_data = sorted_df.values.tolist()
+        sheet = client.open("로또DB").sheet1
+        data = sheet.get_all_values()
+        
+        parsed_data = []
+        if len(data) > 1:
+            for row in data[1:]:
+                if not row[0]: continue # 빈 줄 건너뛰기
+                parsed_data.append([int(x) for x in row])
+                
+        # 과거 회차가 위로 오도록 오름차순 정렬
+        parsed_data.sort(key=lambda x: x[0]) 
+        return parsed_data
     except Exception as e:
-        st.error(f"데이터베이스 파일을 불러오는 중 오류가 발생했습니다: {e}")
-        st.session_state.lotto_data = []
+        print(f"Error loading sheet: {e}")
+        return []
 
-# 데이터 입력 후 새로고침 시 메시지를 띄워주기 위한 로직
+# 세션에 데이터 로드
+current_data = load_data_from_sheet()
+
+st.title("🎯 로또 직전 4회차 패턴 자동 분석기 (DB연동형)")
+st.markdown("새로운 당첨번호를 입력하면 구글 시트(DB)에 자동 저장되며 패턴을 분석합니다.")
+
+# 새로고침 메시지 처리
 if 'success_msg' in st.session_state:
     st.success(st.session_state.success_msg)
     del st.session_state.success_msg
 if 'info_msg' in st.session_state:
     st.info(st.session_state.info_msg)
     del st.session_state.info_msg
-
-current_data = st.session_state.lotto_data
+if 'error_msg' in st.session_state:
+    st.error(st.session_state.error_msg)
+    del st.session_state.error_msg
 
 # ==========================================
 # 공통: 최근 20회차 패턴 통계 사전 계산
@@ -94,7 +120,6 @@ if len(current_data) >= 4:
 
     st.caption(f"📊 현재 번호 풀 (미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
 
-    # 선택 박스 동적 생성 (실제 1위 패턴을 맨 위로)
     base_patterns = ["2:4:0", "4:2:0", "4:1:1", "3:2:1", "3:3:0", "5:1:0"]
     sorted_patterns = [p for p, c in pattern_counts.most_common()]
     for bp in base_patterns:
@@ -110,10 +135,7 @@ if len(current_data) >= 4:
 
     col1, col2 = st.columns([2, 1])
     with col1:
-        target_pattern = st.selectbox(
-            "원하시는 패턴을 선택하세요 (자동 정렬)",
-            selectbox_options
-        )
+        target_pattern = st.selectbox("원하시는 패턴을 선택하세요", selectbox_options)
     with col2:
         st.write("") 
         st.write("")
@@ -150,68 +172,117 @@ else:
 st.divider()
 
 # ==========================================
-# 3. 신규 당첨번호 입력
+# 3. 데이터 입력 / 수정 / 삭제 (탭으로 구분)
 # ==========================================
-st.subheader("📝 신규 당첨번호 입력")
-with st.form("new_draw_form"):
-    cols = st.columns(8)
-    if len(current_data) > 0:
-        last_draw_no = int(current_data[-1][0])
-    else:
-        last_draw_no = 0
-    
-    draw_no = cols[0].number_input("회차", value=last_draw_no + 1, step=1)
-    n1 = cols[1].number_input("번호1", min_value=1, max_value=45, value=1)
-    n2 = cols[2].number_input("번호2", min_value=1, max_value=45, value=2)
-    n3 = cols[3].number_input("번호3", min_value=1, max_value=45, value=3)
-    n4 = cols[4].number_input("번호4", min_value=1, max_value=45, value=4)
-    n5 = cols[5].number_input("번호5", min_value=1, max_value=45, value=5)
-    n6 = cols[6].number_input("번호6", min_value=1, max_value=45, value=6)
-    bonus = cols[7].number_input("보너스", min_value=1, max_value=45, value=7)
-    
-    submitted = st.form_submit_button("패턴 분석 및 DB에 추가하기")
+st.subheader("⚙️ 데이터베이스 관리")
 
-if submitted:
-    new_draw = [draw_no, n1, n2, n3, n4, n5, n6, bonus]
-    winning_nums = [n1, n2, n3, n4, n5, n6]
+tab1, tab2, tab3 = st.tabs(["📝 신규 입력", "✏️ 특정 회차 수정", "🗑️ 방금 입력한 데이터 삭제"])
+
+# --- 탭 1: 신규 입력 ---
+with tab1:
+    with st.form("new_draw_form"):
+        cols = st.columns(8)
+        last_draw_no = int(current_data[-1][0]) if current_data else 1230
+        
+        draw_no = cols[0].number_input("회차", value=last_draw_no + 1, step=1)
+        n1 = cols[1].number_input("번호1", min_value=1, max_value=45, value=1)
+        n2 = cols[2].number_input("번호2", min_value=1, max_value=45, value=2)
+        n3 = cols[3].number_input("번호3", min_value=1, max_value=45, value=3)
+        n4 = cols[4].number_input("번호4", min_value=1, max_value=45, value=4)
+        n5 = cols[5].number_input("번호5", min_value=1, max_value=45, value=5)
+        n6 = cols[6].number_input("번호6", min_value=1, max_value=45, value=6)
+        bonus = cols[7].number_input("보너스", min_value=1, max_value=45, value=7)
+        
+        submitted = st.form_submit_button("DB에 영구 저장 및 분석하기")
+
+    if submitted:
+        new_draw = [draw_no, n1, n2, n3, n4, n5, n6, bonus]
+        
+        try:
+            sheet = client.open("로또DB").sheet1
+            sheet.append_row(new_draw)
+            load_data_from_sheet.clear() # 캐시 비우기
+            
+            st.session_state.success_msg = f"✅ **{draw_no}회차 데이터가 구글 시트에 추가되었습니다!**"
+            st.rerun()
+        except Exception as e:
+            st.session_state.error_msg = f"데이터 저장 실패: {e}"
+            st.rerun()
+
+# --- 탭 2: 데이터 수정 ---
+with tab2:
+    st.write("구글 시트에 저장된 특정 회차의 번호를 수정합니다.")
     
-    if len(current_data) >= 4:
-        prev_4 = current_data[-4:]
-        appeared_nums = []
-        for d in prev_4:
-            appeared_nums.extend(d[1:8])
-            
-        freq = {n: 0 for n in range(1, 46)}
-        for n in appeared_nums:
-            freq[n] += 1
-            
-        cnt_0, cnt_1, cnt_2plus = 0, 0, 0
-        for wn in winning_nums:
-            if freq[wn] == 0: cnt_0 += 1
-            elif freq[wn] == 1: cnt_1 += 1
-            else: cnt_2plus += 1
-            
-        pattern_str = f"{cnt_0}:{cnt_1}:{cnt_2plus}"
+    # 수정할 회차 선택을 위한 리스트 만들기 (최신 회차부터 역순)
+    if current_data:
+        draw_list = [row[0] for row in reversed(current_data)]
+        target_edit = st.selectbox("수정할 회차 선택", draw_list)
         
-        # 데이터를 추가하고 새로고침을 위한 메시지 셋팅
-        st.session_state.lotto_data.append(new_draw)
-        st.session_state.success_msg = f"✅ **{draw_no}회차 분석 및 추가 완료!**"
-        st.session_state.info_msg = f"**도출된 패턴:** 🎯 {pattern_str} (미출현 {cnt_0}개, 1회출현 {cnt_1}개, 2회이상 {cnt_2plus}개)"
+        # 선택한 회차의 기존 데이터 찾기
+        target_row_data = next((row for row in current_data if row[0] == target_edit), None)
         
-        # 상단 차트와 추천기 업데이트를 위해 앱을 즉시 새로고침
-        st.rerun()
+        if target_row_data:
+            with st.form("edit_form"):
+                cols = st.columns(8)
+                st.write(f"**{target_edit}회차 수정**")
+                e_n1 = cols[1].number_input("번호1", min_value=1, max_value=45, value=target_row_data[1], key="e_n1")
+                e_n2 = cols[2].number_input("번호2", min_value=1, max_value=45, value=target_row_data[2], key="e_n2")
+                e_n3 = cols[3].number_input("번호3", min_value=1, max_value=45, value=target_row_data[3], key="e_n3")
+                e_n4 = cols[4].number_input("번호4", min_value=1, max_value=45, value=target_row_data[4], key="e_n4")
+                e_n5 = cols[5].number_input("번호5", min_value=1, max_value=45, value=target_row_data[5], key="e_n5")
+                e_n6 = cols[6].number_input("번호6", min_value=1, max_value=45, value=target_row_data[6], key="e_n6")
+                e_bonus = cols[7].number_input("보너스", min_value=1, max_value=45, value=target_row_data[7], key="e_bonus")
+                
+                edit_submitted = st.form_submit_button("수정 완료 (구글 시트 덮어쓰기)")
+                
+            if edit_submitted:
+                try:
+                    sheet = client.open("로또DB").sheet1
+                    # A열(회차)에서 수정할 회차를 찾아 몇 번째 줄인지 알아냅니다. (헤더 포함이므로 +1)
+                    cell = sheet.find(str(target_edit), in_column=1)
+                    if cell:
+                        row_idx = cell.row
+                        sheet.update(f'B{row_idx}:H{row_idx}', [[e_n1, e_n2, e_n3, e_n4, e_n5, e_n6, e_bonus]])
+                        load_data_from_sheet.clear()
+                        st.session_state.success_msg = f"🔄 **{target_edit}회차 데이터가 성공적으로 수정되었습니다!**"
+                        st.rerun()
+                    else:
+                        st.error("해당 회차를 구글 시트에서 찾을 수 없습니다.")
+                except Exception as e:
+                    st.error(f"수정 실패: {e}")
     else:
-        st.error("직전 4회차 이상의 데이터가 필요합니다.")
+        st.info("수정할 데이터가 없습니다.")
+
+# --- 탭 3: 마지막 행 삭제 ---
+with tab3:
+    st.warning("⚠️ 실수로 데이터를 잘못 추가했을 때, 구글 시트의 맨 아랫줄(마지막에 입력한 데이터)을 삭제합니다.")
+    if current_data:
+        last_added = current_data[-1]
+        st.write(f"현재 마지막으로 저장된 데이터는 **{last_added[0]}회차** 입니다.")
+        
+        if st.button("🚨 마지막 입력 데이터(맨 아랫줄) 삭제하기", type="primary"):
+            try:
+                sheet = client.open("로또DB").sheet1
+                # 헤더가 1번 줄이므로, 실제 데이터 줄 수는 데이터 길이 + 1
+                last_row_idx = len(current_data) + 1 
+                sheet.delete_rows(last_row_idx)
+                
+                load_data_from_sheet.clear()
+                st.session_state.success_msg = f"🗑️ **{last_added[0]}회차 데이터가 삭제되었습니다!**"
+                st.rerun()
+            except Exception as e:
+                st.error(f"삭제 실패: {e}")
+    else:
+        st.info("삭제할 데이터가 없습니다.")
 
 st.divider()
 
 # ==========================================
-# 4. 누적 데이터베이스
+# 4. 누적 데이터베이스 출력
 # ==========================================
 st.subheader("📊 누적 당첨번호 데이터베이스")
 
 display_data = []
-
 for i in range(len(current_data)):
     row = current_data[i]
     if i >= 4:
