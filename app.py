@@ -5,7 +5,13 @@ from collections import Counter
 import gspread
 from google.oauth2.service_account import Credentials
 
+# ---------------------------------------------
+# 1. 페이지 설정 및 구글 시트 연동 세팅
+# ---------------------------------------------
 st.set_page_config(page_title="로또 패턴 분석기", page_icon="🎯", layout="wide")
+
+# 👇👇👇 복사하신 구글 시트 링크(URL)를 아래 따옴표 안에 꼭 붙여넣어 주세요! 👇👇👇
+SHEET_URL = "https://docs.google.com/spreadsheets/d/1tW8KwjFh9PZEoLxNyoiboi_UFc9CRFX0tIj0pdIqGf4/edit?usp=drivesdk"
 
 scopes = [
     "https://www.googleapis.com/auth/spreadsheets",
@@ -23,7 +29,8 @@ except Exception as e:
 @st.cache_data(ttl=5)
 def load_data_from_sheet():
     try:
-        sheet = client.open("로또DB").sheet1
+        # 이름 대신 주소(URL)로 정확히 찾아가서 엽니다.
+        sheet = client.open_by_url(SHEET_URL).sheet1
         data = sheet.get_all_values()
         
         parsed_data = []
@@ -34,13 +41,11 @@ def load_data_from_sheet():
                     clean_row = [int(str(x).replace(',', '').strip()) for x in row[:8]]
                     parsed_data.append(clean_row)
                 except ValueError:
-                    st.warning(f"⚠️ {idx+2}번째 줄 데이터를 숫자로 변환할 수 없어 건너뛰었습니다: {row}")
                     continue
                     
         parsed_data.sort(key=lambda x: x[0]) 
         return parsed_data
     except Exception as e:
-        # 이 부분이 핵심입니다! 에러의 진짜 원인을 화면에 띄워줍니다.
         st.error(f"🚨 구글 시트 데이터를 불러오는 중 에러가 발생했습니다: {e}")
         return []
 
@@ -171,7 +176,7 @@ with tab1:
     if submitted:
         new_draw = [draw_no, n1, n2, n3, n4, n5, n6, bonus]
         try:
-            sheet = client.open("로또DB").sheet1
+            sheet = client.open_by_url(SHEET_URL).sheet1
             sheet.append_row(new_draw)
             load_data_from_sheet.clear() 
             st.session_state.success_msg = f"✅ **{draw_no}회차 데이터 추가 완료!**"
@@ -200,7 +205,7 @@ with tab2:
                 
             if edit_submitted:
                 try:
-                    sheet = client.open("로또DB").sheet1
+                    sheet = client.open_by_url(SHEET_URL).sheet1
                     cell = sheet.find(str(target_edit), in_column=1)
                     if cell:
                         sheet.update(f'B{cell.row}:H{cell.row}', [[e_n1, e_n2, e_n3, e_n4, e_n5, e_n6, e_bonus]])
@@ -216,7 +221,7 @@ with tab3:
         st.write(f"마지막 데이터: **{last_added[0]}회차**")
         if st.button("🚨 맨 아랫줄 삭제하기", type="primary"):
             try:
-                sheet = client.open("로또DB").sheet1
+                sheet = client.open_by_url(SHEET_URL).sheet1
                 sheet.delete_rows(len(current_data) + 1)
                 load_data_from_sheet.clear()
                 st.session_state.success_msg = f"🗑️ **{last_added[0]}회차 삭제 완료!**"
