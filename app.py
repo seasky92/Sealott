@@ -29,9 +29,17 @@ def load_data_from_sheet():
         parsed_data = []
         if len(data) > 1:
             for row in data[1:]:
-                if not row[0]: continue
-                parsed_data.append([int(x) for x in row])
+                # 빈 줄이거나 회차 정보가 없으면 건너뛰기
+                if not row or not row[0]: continue
                 
+                try:
+                    # A열(0)부터 H열(7)까지만 정확히 잘라서 가져오고, 콤마(,)와 공백을 자동 제거
+                    clean_row = [int(str(x).replace(',', '').strip()) for x in row[:8]]
+                    parsed_data.append(clean_row)
+                except ValueError:
+                    # 만약 숫자로 바꿀 수 없는 이상한 줄이 껴있으면 무시하고 계속 진행
+                    continue
+                    
         parsed_data.sort(key=lambda x: x[0]) 
         return parsed_data
     except Exception as e:
