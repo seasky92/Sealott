@@ -18,7 +18,7 @@ try:
     )
     client = gspread.authorize(creds)
 except Exception as e:
-    st.error("구글 인증 실패. Secrets 설정을 확인해주세요.")
+    st.error(f"🚨 구글 인증 실패: {e}")
 
 @st.cache_data(ttl=5)
 def load_data_from_sheet():
@@ -28,21 +28,20 @@ def load_data_from_sheet():
         
         parsed_data = []
         if len(data) > 1:
-            for row in data[1:]:
-                # 빈 줄이거나 회차 정보가 없으면 건너뛰기
+            for idx, row in enumerate(data[1:]):
                 if not row or not row[0]: continue
-                
                 try:
-                    # A열(0)부터 H열(7)까지만 정확히 잘라서 가져오고, 콤마(,)와 공백을 자동 제거
                     clean_row = [int(str(x).replace(',', '').strip()) for x in row[:8]]
                     parsed_data.append(clean_row)
                 except ValueError:
-                    # 만약 숫자로 바꿀 수 없는 이상한 줄이 껴있으면 무시하고 계속 진행
+                    st.warning(f"⚠️ {idx+2}번째 줄 데이터를 숫자로 변환할 수 없어 건너뛰었습니다: {row}")
                     continue
                     
         parsed_data.sort(key=lambda x: x[0]) 
         return parsed_data
     except Exception as e:
+        # 이 부분이 핵심입니다! 에러의 진짜 원인을 화면에 띄워줍니다.
+        st.error(f"🚨 구글 시트 데이터를 불러오는 중 에러가 발생했습니다: {e}")
         return []
 
 current_data = load_data_from_sheet()
