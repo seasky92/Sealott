@@ -95,45 +95,7 @@ if len(current_data) >= 5:
     df_patterns = df_patterns.sort_values(by="출현 횟수", ascending=False).reset_index(drop=True)
 
 # ==========================================
-# 1. 최근 5회차 용지 패턴 (시각화)
-# ==========================================
-st.subheader("📍 최근 5회차 용지 패턴 (시각화)")
-st.caption("실제 로또 마킹 용지와 동일한 배열(가로 7칸)에서 당첨 번호의 시각적 흐름(사선, 뭉침 등)을 확인하세요.")
-
-if len(current_data) >= 5:
-    recent_5 = list(reversed(current_data[-5:])) # 최신 회차가 먼저 오게 순서 뒤집기
-    tabs = st.tabs([f"{row[0]}회차" for row in recent_5])
-    
-    for i, tab in enumerate(tabs):
-        with tab:
-            draw_no = recent_5[i][0]
-            win_nums = recent_5[i][1:7]
-            bonus_num = recent_5[i][7]
-            
-            st.markdown(f"**{draw_no}회차 당첨번호:** {', '.join(map(str, win_nums))} + 보너스 {bonus_num}")
-            
-            # HTML과 CSS를 이용해 사진과 똑같은 7x7 로또 용지 그리드 생성
-            grid_html = "<div style='display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 320px; margin: 10px 0;'>"
-            for num in range(1, 46):
-                if num in win_nums:
-                    # 당첨된 번호: 빨간색 배경에 흰색 글자
-                    style = "background-color: #ff4b4b; color: white; border: 1px solid #ff4b4b; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
-                elif num == bonus_num:
-                    # 보너스 번호: 초록색 배경
-                    style = "background-color: #00cc66; color: white; border: 1px solid #00cc66; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
-                else:
-                    # 미당첨 번호: 사진처럼 흰 배경에 옅은 빨간색 글자 및 테두리
-                    style = "background-color: white; color: #ff9999; border: 1px solid #ffcccc; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: normal;"
-                grid_html += f"<div style='{style}'>{num}</div>"
-            grid_html += "</div>"
-            st.markdown(grid_html, unsafe_allow_html=True)
-else:
-    st.info("데이터가 충분하지 않습니다.")
-    
-st.divider()
-
-# ==========================================
-# 2. 번호 추천기
+# 1. 번호 추천기
 # ==========================================
 st.subheader("🎲 인기 패턴 기반 번호 추천")
 if len(current_data) >= 4:
@@ -187,7 +149,7 @@ if len(current_data) >= 4:
 st.divider()
 
 # ==========================================
-# 3. 최근 패턴 출현 통계 (그래프 삭제 후 표만 남김)
+# 2. 최근 패턴 출현 통계 (표)
 # ==========================================
 st.subheader("📈 최근 20회차 패턴 출현 통계")
 st.caption("최근 20회차 동안 어떤 출현 패턴(0회:1회:2회이상)이 가장 자주 나왔는지 보여줍니다.")
@@ -199,7 +161,7 @@ else:
 st.divider()
 
 # ==========================================
-# 4. 데이터베이스 관리
+# 3. 데이터베이스 관리
 # ==========================================
 st.subheader("⚙️ 데이터베이스 관리")
 tab1, tab2, tab3 = st.tabs(["📝 신규 입력", "✏️ 특정 회차 수정", "🗑️ 마지막 데이터 삭제"])
@@ -277,7 +239,7 @@ with tab3:
 st.divider()
 
 # ==========================================
-# 5. 누적 데이터베이스 출력
+# 4. 누적 데이터베이스 출력
 # ==========================================
 st.subheader("📊 누적 당첨번호 데이터베이스")
 display_data = []
@@ -304,3 +266,41 @@ for i in range(len(current_data)):
 
 df_display = pd.DataFrame(display_data, columns=['회차', '번호1', '번호2', '번호3', '번호4', '번호5', '번호6', '보너스', '출현패턴'])
 st.dataframe(df_display.sort_values(by='회차', ascending=False), use_container_width=True)
+
+st.divider()
+
+# ==========================================
+# 5. 최근 5회차 용지 패턴 (시각화) - 맨 마지막으로 이동
+# ==========================================
+st.subheader("📍 최근 5회차 용지 패턴 (시각화)")
+st.caption("실제 로또 마킹 용지와 동일한 배열(가로 7칸)에서 당첨 번호의 시각적 흐름(사선, 뭉침 등)을 확인하세요.")
+
+if len(current_data) >= 5:
+    recent_5 = list(reversed(current_data[-5:])) # 최신 회차가 먼저 오게 순서 뒤집기
+    tabs = st.tabs([f"{row[0]}회차" for row in recent_5])
+    
+    for i, tab in enumerate(tabs):
+        with tab:
+            draw_no = recent_5[i][0]
+            win_nums = recent_5[i][1:7]
+            bonus_num = recent_5[i][7]
+            
+            st.markdown(f"**{draw_no}회차 당첨번호:** {', '.join(map(str, win_nums))} + 보너스 {bonus_num}")
+            
+            # HTML과 CSS를 이용해 사진과 똑같은 7x7 로또 용지 그리드 생성
+            grid_html = "<div style='display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 320px; margin: 10px 0;'>"
+            for num in range(1, 46):
+                if num in win_nums:
+                    # 당첨된 번호: 빨간색 배경에 흰색 글자
+                    style = "background-color: #ff4b4b; color: white; border: 1px solid #ff4b4b; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
+                elif num == bonus_num:
+                    # 보너스 번호: 초록색 배경
+                    style = "background-color: #00cc66; color: white; border: 1px solid #00cc66; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
+                else:
+                    # 미당첨 번호: 사진처럼 흰 배경에 옅은 빨간색 글자 및 테두리
+                    style = "background-color: white; color: #ff9999; border: 1px solid #ffcccc; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: normal;"
+                grid_html += f"<div style='{style}'>{num}</div>"
+            grid_html += "</div>"
+            st.markdown(grid_html, unsafe_allow_html=True)
+else:
+    st.info("데이터가 충분하지 않습니다.")
