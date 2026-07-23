@@ -5,9 +5,6 @@ from collections import Counter
 import gspread
 from google.oauth2.service_account import Credentials
 
-# ---------------------------------------------
-# 1. 페이지 설정 및 구글 시트 연동 세팅
-# ---------------------------------------------
 st.set_page_config(page_title="로또 패턴 분석기", page_icon="🎯", layout="wide")
 
 # 👇👇👇 복사하신 구글 시트 링크(URL)를 아래 따옴표 안에 꼭 붙여넣어 주세요! 👇👇👇
@@ -29,7 +26,6 @@ except Exception as e:
 @st.cache_data(ttl=5)
 def load_data_from_sheet():
     try:
-        # 이름 대신 주소(URL)로 정확히 찾아가서 엽니다.
         sheet = client.open_by_url(SHEET_URL).sheet1
         data = sheet.get_all_values()
         
@@ -61,6 +57,9 @@ if 'error_msg' in st.session_state:
     st.error(st.session_state.error_msg)
     del st.session_state.error_msg
 
+# ==========================================
+# 0. 공통 패턴 계산 로직 (보너스 제외)
+# ==========================================
 analyze_count = 0
 df_patterns = pd.DataFrame()
 pattern_counts = Counter()
@@ -76,13 +75,13 @@ if len(current_data) >= 5:
         
         appeared = []
         for d in prev_4_draws:
-            appeared.extend(d[1:8])
+            appeared.extend(d[1:7]) # 보너스 제외
             
         freq = {n: 0 for n in range(1, 46)}
         for n in appeared:
             freq[n] += 1
             
-        wns = curr_draw[1:7]
+        wns = curr_draw[1:7] # 보너스 제외
         c0, c1, c2 = 0, 0, 0
         for w in wns:
             if freq[w] == 0: c0 += 1
@@ -95,12 +94,53 @@ if len(current_data) >= 5:
     df_patterns = pd.DataFrame(pattern_counts.items(), columns=["패턴", "출현 횟수"])
     df_patterns = df_patterns.sort_values(by="출현 횟수", ascending=False).reset_index(drop=True)
 
+# ==========================================
+# 1. 최근 5회차 용지 패턴 (시각화)
+# ==========================================
+st.subheader("📍 최근 5회차 용지 패턴 (시각화)")
+st.caption("실제 로또 마킹 용지와 동일한 배열(가로 7칸)에서 당첨 번호의 시각적 흐름(사선, 뭉침 등)을 확인하세요.")
+
+if len(current_data) >= 5:
+    recent_5 = list(reversed(current_data[-5:])) # 최신 회차가 먼저 오게 순서 뒤집기
+    tabs = st.tabs([f"{row[0]}회차" for row in recent_5])
+    
+    for i, tab in enumerate(tabs):
+        with tab:
+            draw_no = recent_5[i][0]
+            win_nums = recent_5[i][1:7]
+            bonus_num = recent_5[i][7]
+            
+            st.markdown(f"**{draw_no}회차 당첨번호:** {', '.join(map(str, win_nums))} + 보너스 {bonus_num}")
+            
+            # HTML과 CSS를 이용해 사진과 똑같은 7x7 로또 용지 그리드 생성
+            grid_html = "<div style='display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 320px; margin: 10px 0;'>"
+            for num in range(1, 46):
+                if num in win_nums:
+                    # 당첨된 번호: 빨간색 배경에 흰색 글자
+                    style = "background-color: #ff4b4b; color: white; border: 1px solid #ff4b4b; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
+                elif num == bonus_num:
+                    # 보너스 번호: 초록색 배경
+                    style = "background-color: #00cc66; color: white; border: 1px solid #00cc66; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: bold;"
+                else:
+                    # 미당첨 번호: 사진처럼 흰 배경에 옅은 빨간색 글자 및 테두리
+                    style = "background-color: white; color: #ff9999; border: 1px solid #ffcccc; border-radius: 4px; padding: 10px 0; text-align: center; font-weight: normal;"
+                grid_html += f"<div style='{style}'>{num}</div>"
+            grid_html += "</div>"
+            st.markdown(grid_html, unsafe_allow_html=True)
+else:
+    st.info("데이터가 충분하지 않습니다.")
+    
+st.divider()
+
+# ==========================================
+# 2. 번호 추천기
+# ==========================================
 st.subheader("🎲 인기 패턴 기반 번호 추천")
 if len(current_data) >= 4:
     latest_4 = current_data[-4:]
     recent_appeared = []
     for d in latest_4:
-        recent_appeared.extend(d[1:8])
+        recent_appeared.extend(d[1:7]) # 보너스 제외
         
     current_freq = {n: 0 for n in range(1, 46)}
     for n in recent_appeared:
@@ -110,7 +150,7 @@ if len(current_data) >= 4:
     pool_1 = [n for n, c in current_freq.items() if c == 1]
     pool_2plus = [n for n, c in current_freq.items() if c >= 2]
 
-    st.caption(f"📊 현재 번호 풀 (미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
+    st.caption(f"📊 현재 번호 풀 (직전 4회차 보너스 제외 / 미출현: {len(pool_0)}개 / 1회출현: {len(pool_1)}개 / 2회이상: {len(pool_2plus)}개)")
 
     base_patterns = ["2:4:0", "4:2:0", "4:1:1", "3:2:1", "3:3:0", "5:1:0"]
     sorted_patterns = [p for p, c in pattern_counts.most_common()]
@@ -146,16 +186,21 @@ if len(current_data) >= 4:
 
 st.divider()
 
+# ==========================================
+# 3. 최근 패턴 출현 통계 (그래프 삭제 후 표만 남김)
+# ==========================================
 st.subheader("📈 최근 20회차 패턴 출현 통계")
+st.caption("최근 20회차 동안 어떤 출현 패턴(0회:1회:2회이상)이 가장 자주 나왔는지 보여줍니다.")
 if not df_patterns.empty: 
-    col_chart1, col_chart2 = st.columns([1, 2])
-    with col_chart1:
-        st.dataframe(df_patterns, use_container_width=True)
-    with col_chart2:
-        st.bar_chart(df_patterns.set_index("패턴"))
+    st.dataframe(df_patterns, use_container_width=True)
+else:
+    st.info("패턴 통계를 보려면 최소 5개 회차 이상의 데이터가 필요합니다.")
 
 st.divider()
 
+# ==========================================
+# 4. 데이터베이스 관리
+# ==========================================
 st.subheader("⚙️ 데이터베이스 관리")
 tab1, tab2, tab3 = st.tabs(["📝 신규 입력", "✏️ 특정 회차 수정", "🗑️ 마지막 데이터 삭제"])
 
@@ -231,6 +276,9 @@ with tab3:
 
 st.divider()
 
+# ==========================================
+# 5. 누적 데이터베이스 출력
+# ==========================================
 st.subheader("📊 누적 당첨번호 데이터베이스")
 display_data = []
 for i in range(len(current_data)):
@@ -238,7 +286,9 @@ for i in range(len(current_data)):
     if i >= 4:
         prev_4 = current_data[i-4:i]
         appeared_nums = []
-        for d in prev_4: appeared_nums.extend(d[1:8])
+        for d in prev_4: 
+            appeared_nums.extend(d[1:7]) # 보너스 제외
+            
         freq = {n: 0 for n in range(1, 46)}
         for n in appeared_nums: freq[n] += 1
         wns = row[1:7]
