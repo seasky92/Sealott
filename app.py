@@ -66,7 +66,7 @@ if len(current_data) >= 5:
         st.subheader("📋 통계 표")
         st.dataframe(df_patterns, use_container_width=True)
 
-    # 2. 번호 추천 (랜덤 패턴 추가)
+    # 2. 번호 추천
     st.subheader("🎲 번호 추천")
     latest_4 = current_data[-4:]
     recent_appeared = [n for d in latest_4 for n in d[1:7]]
@@ -75,17 +75,14 @@ if len(current_data) >= 5:
     pool_1 = [n for n, c in current_freq.items() if c == 1]
     pool_2plus = [n for n, c in current_freq.items() if c >= 2]
 
-    # 패턴 선택 옵션
     options = ["모든 패턴에서 랜덤 섞기"] + [f"{p} 패턴" for p in df_patterns['패턴']]
     target_pattern = st.selectbox("패턴 선택", options)
 
     if st.button("행운 번호 뽑기! 🍀"):
         if "랜덤" in target_pattern:
-            # 모든 패턴의 가중치를 반영하여 랜덤 선택
             p_str = random.choices(list(pattern_counts.keys()), weights=list(pattern_counts.values()))[0]
         else:
             p_str = target_pattern.split(" ")[0]
-        
         p0, p1, p2 = map(int, p_str.split(":"))
         if len(pool_0) >= p0 and len(pool_1) >= p1 and len(pool_2plus) >= p2:
             rec = random.sample(pool_0, p0) + random.sample(pool_1, p1) + random.sample(pool_2plus, p2)
@@ -95,10 +92,40 @@ if len(current_data) >= 5:
 
 st.divider()
 
-# 3. 데이터 관리 및 시각화 (용지 패턴은 맨 아래)
+# 3. 데이터 관리
 with st.expander("⚙️ 데이터베이스 관리"):
-    st.write("데이터 수정 및 관리는 여기서 수행하세요.")
-    # (기존 입력/수정/삭제 폼 코드 유지)
+    tab1, tab2, tab3 = st.tabs(["📝 신규 입력", "✏️ 수정", "🗑️ 삭제"])
+    with tab1:
+        with st.form("new"):
+            cols = st.columns(8)
+            draw_no = cols[0].number_input("회차", value=int(current_data[-1][0])+1 if current_data else 1)
+            nums = [cols[i+1].number_input(f"번호{i+1}", min_value=1, max_value=45, value=i+1) for i in range(6)]
+            bonus = cols[7].number_input("보너스", min_value=1, max_value=45, value=7)
+            if st.form_submit_button("추가"):
+                client.open_by_url(SHEET_URL).sheet1.append_row([draw_no] + nums + [bonus])
+                st.rerun()
 
+    with tab2:
+        if current_data:
+            target = st.selectbox("수정 회차", [r[0] for r in reversed(current_data)])
+            if st.button("해당 회차 수정"): st.warning("수정 기능 구현 중...")
+
+    with tab3:
+        if st.button("마지막 회차 삭제"):
+            client.open_by_url(SHEET_URL).sheet1.delete_rows(len(current_data)+1)
+            st.rerun()
+
+# 4. 용지 패턴 시각화
+st.divider()
 st.subheader("📍 최근 5회차 용지 패턴 (시각화)")
-# (기존 용지 패턴 코드 유지)
+if len(current_data) >= 5:
+    recent_5 = list(reversed(current_data[-5:]))
+    tabs = st.tabs([f"{row[0]}회차" for row in recent_5])
+    for i, tab in enumerate(tabs):
+        with tab:
+            win_nums, bonus = recent_5[i][1:7], recent_5[i][7]
+            grid_html = "<div style='display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 320px;'>"
+            for n in range(1, 46):
+                style = "background:#ff4b4b; color:white;" if n in win_nums else "background:#00cc66; color:white;" if n==bonus else "background:white; color:#ff9999; border:1px solid #ffcccc;"
+                grid_html += f"<div style='{style} border-radius:4px; padding:10px 0; text-align:center;'>{n}</div>"
+            st.markdown(grid_html + "</div>", unsafe_allow_html=True)
