@@ -15,24 +15,16 @@ try:
     client = gspread.authorize(creds)
 except Exception as e:
     st.error(f"🚨 구글 인증 실패: {e}")
-
 @st.cache_data(ttl=5)
 def load_data_from_sheet():
     try:
         sheet = client.open_by_url(SHEET_URL).sheet1
         data = sheet.get_all_values()
-        parsed_data = []
-        if len(data) > 1:
-            for row in data[1:]:
-                if not row or not row[0]: continue
-                try:
-                    clean_row = [int(str(x).replace(',', '').strip()) for x in row[:8]]
-                    parsed_data.append(clean_row)
-                except ValueError: continue
-        parsed_data.sort(key=lambda x: x[0]) 
+        # ... (중략)
         return parsed_data
     except Exception as e:
-        st.error(f"🚨 데이터 로드 에러: {e}")
+        # 에러 메시지를 화면에 그대로 띄우도록 수정
+        st.error(f"🚨 데이터 로드 에러: {e}") 
         return []
 
 current_data = load_data_from_sheet()
