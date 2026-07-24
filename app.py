@@ -22,7 +22,7 @@ def load_data():
 
 data = load_data()
 
-# 0. 패턴 계산 로직 (보너스 제외, 직전 4회 분석)
+# 패턴 계산 로직
 pattern_data = []
 for i in range(4, len(data)):
     curr = data[i]
@@ -39,7 +39,7 @@ df_patterns = pd.DataFrame(pattern_data)
 # --- UI 시작 ---
 st.title("🎯 로또 패턴 분석 및 추천")
 
-# 1. 랜덤 패턴 추천 (맨 위)
+# 1. 랜덤 추천
 st.subheader("🎲 인기 패턴 기반 랜덤 추천")
 pattern_counts = df_patterns['패턴'].value_counts()
 selected_p = st.selectbox("패턴 선택", ["전체 패턴 중 랜덤"] + list(pattern_counts.index))
@@ -47,13 +47,11 @@ selected_p = st.selectbox("패턴 선택", ["전체 패턴 중 랜덤"] + list(p
 if st.button("행운 번호 추천받기"):
     p_str = random.choices(list(pattern_counts.index), weights=pattern_counts.values)[0] if "랜덤" in selected_p else selected_p
     c0, c1, c2 = map(int, p_str.split(":"))
-    
     last_4 = [n for d in data[-4:] for n in d[1:7]]
     freq = Counter(last_4)
     pool0 = [n for n in range(1, 46) if freq[n] == 0]
     pool1 = [n for n in range(1, 46) if freq[n] == 1]
     pool2 = [n for n in range(1, 46) if freq[n] >= 2]
-    
     if len(pool0) >= c0 and len(pool1) >= c1 and len(pool2) >= c2:
         res = random.sample(pool0, c0) + random.sample(pool1, c1) + random.sample(pool2, c2)
         st.success(f"[{p_str} 패턴] 추천번호: {sorted(res)}")
@@ -70,7 +68,20 @@ with st.expander("⚙️ 데이터베이스 관리"):
         client.open_by_url(SHEET_URL).sheet1.delete_rows(len(data)+1)
         st.rerun()
 
-# 4. 그래프 (맨 밑으로 이동)
+# 4. 최근 5회차 용지 패턴 (복구 완료!)
+st.subheader("📍 최근 5회차 용지 패턴 (시각화)")
+recent_5 = list(reversed(data[-5:]))
+tabs = st.tabs([f"{row[0]}회차" for row in recent_5])
+for i, tab in enumerate(tabs):
+    with tab:
+        win_nums, bonus = recent_5[i][1:7], recent_5[i][7]
+        grid_html = "<div style='display: grid; grid-template-columns: repeat(7, 1fr); gap: 6px; max-width: 320px;'>"
+        for n in range(1, 46):
+            style = "background:#ff4b4b; color:white;" if n in win_nums else "background:#00cc66; color:white;" if n==bonus else "background:#f0f2f6; border:1px solid #ddd;"
+            grid_html += f"<div style='{style} border-radius:4px; padding:8px 0; text-align:center;'>{n}</div>"
+        st.markdown(grid_html + "</div>", unsafe_allow_html=True)
+
+# 5. 그래프
 st.divider()
 st.subheader("📊 패턴 출현 빈도 그래프 (933회 ~ 1233회)")
 df_graph = df_patterns[(df_patterns['회차'] >= 933) & (df_patterns['회차'] <= 1233)]
