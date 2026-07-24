@@ -27,7 +27,7 @@ pattern_data = []
 for i in range(4, len(data)):
     curr = data[i]
     prev4 = data[i-4:i]
-    appeared = [n for d in prev4 for n in d[1:7]] # 보너스 제외
+    appeared = [n for d in prev4 for n in d[1:7]]
     freq = Counter(appeared)
     c0 = sum(1 for n in curr[1:7] if freq[n] == 0)
     c1 = sum(1 for n in curr[1:7] if freq[n] == 1)
@@ -58,19 +58,20 @@ if st.button("행운 번호 추천받기"):
         res = random.sample(pool0, c0) + random.sample(pool1, c1) + random.sample(pool2, c2)
         st.success(f"[{p_str} 패턴] 추천번호: {sorted(res)}")
 
-# 2. 그래프 (933~1233회 한정)
-st.subheader("📊 패턴 출현 빈도 그래프 (933회 ~ 1233회)")
-df_graph = df_patterns[(df_patterns['회차'] >= 933) & (df_patterns['회차'] <= 1233)]
-st.bar_chart(df_graph['패턴'].value_counts())
-
-# 3. 누적 데이터 (복구)
+# 2. 누적 데이터
 st.subheader("📊 누적 당첨번호 데이터")
 df_display = pd.DataFrame(data, columns=['회차', 'n1', 'n2', 'n3', 'n4', 'n5', 'n6', '보너스'])
 df_display = pd.merge(df_display, df_patterns, on='회차', how='left')
 st.dataframe(df_display.sort_values(by='회차', ascending=False), use_container_width=True)
 
-# 4. 데이터 관리
+# 3. 데이터 관리
 with st.expander("⚙️ 데이터베이스 관리"):
     if st.button("마지막 회차 삭제"):
         client.open_by_url(SHEET_URL).sheet1.delete_rows(len(data)+1)
         st.rerun()
+
+# 4. 그래프 (맨 밑으로 이동)
+st.divider()
+st.subheader("📊 패턴 출현 빈도 그래프 (933회 ~ 1233회)")
+df_graph = df_patterns[(df_patterns['회차'] >= 933) & (df_patterns['회차'] <= 1233)]
+st.bar_chart(df_graph['패턴'].value_counts())
