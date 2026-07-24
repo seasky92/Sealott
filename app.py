@@ -7,7 +7,7 @@ from google.oauth2.service_account import Credentials
 
 st.set_page_config(page_title="로또 패턴 분석기", page_icon="🎯", layout="wide")
 
-SHEET_URL = "여기에_구글시트_링크를_붙여넣으세요" # 본인의 링크로 바꾸세요!
+SHEET_URL = "lot0723-2@lot-bot2.iam.gserviceaccount.com" # 본인의 링크로 바꾸세요!
 
 scopes = ["https://www.googleapis.com/auth/spreadsheets", "https://www.googleapis.com/auth/drive"]
 try:
